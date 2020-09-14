@@ -1,18 +1,47 @@
 #!/usr/bin/env ruby
 
+USAGE = <<ENDUSAGE
+Usage:
+   pkdir [-h] directory [-n number] [-f]
+ENDUSAGE
+
+HELP = <<ENDHELP
+   -h, --help       Show this help.
+   -n, --pokemon    Specify which Pokémon to use as the file icon instead of randomly selecting.
+                    Available Pokémon: 001 - 151
+   -f, --force      Force Pokémon over an existing directory.
+
+ENDHELP
+
+ARGS = {}
+UNFLAGGED_ARGS = [ :directory ] # Bare arguments (no flag)
+next_arg = UNFLAGGED_ARGS.first
+ARGV.each do |arg|
+  case arg
+    when '-h','--help'      then ARGS[:help]      = true
+    when '-n','--pokemon'   then next_arg = :pokemon
+    when '-f','--force'     then ARGS[:force]     = true
+    else
+      if next_arg
+        ARGS[next_arg] = arg
+        UNFLAGGED_ARGS.delete( next_arg )
+      end
+      next_arg = UNFLAGGED_ARGS.first
+  end
+end
+
 def rand_pkmn
   "#{__dir__}/orig_151/#{(Dir.entries(__dir__ + "/orig_151") - %w(. ..)).sample}"
 end
 
 def set_icon(pkmn)
-  "#{__dir__}/fileicon set '#{ARGV[0]}' #{pkmn}"
+  "#{__dir__}/fileicon set '#{ARGS[:directory]}' #{pkmn}"
 end
 
 def choose_pkmn
   # If number flag is passed & valid, use that pkmn, else random
-  if ARGV[1]
-    num = ARGV[1].gsub('-', '')
-    Dir.entries(__dir__ + "/orig_151").include?("#{num}.png") ? "#{__dir__}/orig_151/#{num}.png" : rand_pkmn
+  if ARGS[:pokemon]
+    Dir.entries(__dir__ + "/orig_151").include?("#{ARGS[:pokemon]}.png") ? "#{__dir__}/orig_151/#{ARGS[:pokemon]}.png" : rand_pkmn
   else
     rand_pkmn
   end
@@ -21,16 +50,20 @@ end
 def main
   loc = Dir.pwd
   # If dir does not exist, create it, if it exists, prompt to update icon
-  response = `mkdir #{loc + "/'" + ARGV[0] + "'"} 2>&1`
+  response = `mkdir #{loc + "/'" + ARGS[:directory] + "'"} 2>&1`
   if response == ''
     `#{set_icon(choose_pkmn)}`
   elsif response.include? 'File exists'
-    puts "Change icon for existing file or directory - #{ARGV[0]} ? [Yn]"
-    if STDIN.gets.chomp.downcase == 'y'
-      if !`#{__dir__}/fileicon test '#{ARGV[0]}' 2>&1`.include?('NO')
-        `#{__dir__}/fileicon rm '#{ARGV[0]}'`
-      end
+    if ARGS[:force]
       `#{set_icon(choose_pkmn)}`
+    else
+      puts "Change icon for existing file or directory - #{ARGS[:directory]} ? [Yn]"
+      if STDIN.gets.chomp.downcase == 'y'
+        if !`#{__dir__}/fileicon test '#{ARGS[:directory]}' 2>&1`.include?('NO')
+          `#{__dir__}/fileicon rm '#{ARGS[:directory]}'`
+        end
+        `#{set_icon(choose_pkmn)}`
+      end
     end
   else
     puts 'The wild pokémon got away!'
@@ -38,21 +71,36 @@ def main
 end
 
 def help
-  puts """pkdir is a wrapper for mkdir that adds Pokémon to everything.
+  puts """NAME
+  pkdir -- mkdir wrapper that adds Pokémon to everything
 
-pkdir <dir_name> [-n]
+SYNOPSIS
+  pkdir [file] [-number] [--non-interactive]
 
-<dir_name> can be a new directory, or an existing file or directory
-[-n] is an optional 3 digit flag used to specify a pokémon, by number
+DESCRIPTION
+  The pkdir utility creates directories that use random Pokémon for their file icons.
 
-ex: pkdir charizards_stuff -006
+  If the directory passed to pkdir already exists a Pokémon file icon can be added retroactively without altering the contents of the directory.
 
-for more information, check https://github.com/eatspaint/pkdir
+  For more information, check https://github.com/eatspaint/pkdir
+
+  The following options are available:
+
+  -number      Specify which Pokémon to use as the file icon instead of randomly selecting. Must be a 3 digit number in the range 000 - 151.
+
+  --non-interactive      Force the utility to run non-interactively and assume 'Y' input
+
+EXAMPLES
+  The following is how to create (or modify) a directory to use Charizard as a file icon
+
+      pkdir charizards_stuff -006
 """
 end
 
-if ARGV[0] == '-h'
-  help
-else
-  main
+if ARGS[:help] or !ARGS[:directory]
+  puts USAGE
+  puts HELP if ARGS[:help]
+  exit
 end
+
+main
